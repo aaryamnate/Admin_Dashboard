@@ -1,0 +1,206 @@
+// ============================================================================
+// VYAYAM AI Admin Portal - Prisma Schema (SQLite compatible)
+// Database: SQLite
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+// ============================================================================
+// MODELS
+// ============================================================================
+
+model Gym {
+  id          String    @id @default(cuid())
+  name        String
+  slug        String?   @unique
+  ownerId     String    @map("owner_id")
+  email       String?
+  phone       String?
+  address     String?
+  city        String?
+  state       String?
+  pincode     String?
+  logoUrl     String?   @map("logo_url")
+  plan        String    @default("PRO") // STARTER, PRO, ENTERPRISE
+  status      String    @default("ACTIVE") // ACTIVE, PENDING, SUSPENDED
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  owner       User      @relation("GymOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  users       User[]    @relation("GymMembers")
+
+  @@map("gyms")
+  @@index([ownerId])
+  @@index([status])
+}
+
+model User {
+  id                  String     @id @default(cuid())
+  name                String
+  email               String     @unique
+  passwordHash        String     @map("password_hash")
+  phone               String?
+  gender              String?    // MALE, FEMALE, OTHER
+  dateOfBirth         DateTime?  @map("date_of_birth")
+  address             String?
+  role                String     @default("CLIENT") // ADMIN, TRAINER, CLIENT
+  heightCm            Float?     @map("height_cm")
+  weightKg            Float?     @map("weight_kg")
+  status              String     @default("ACTIVE") // ACTIVE, INACTIVE, SUSPENDED
+  approvalStatus      String     @default("APPROVED") @map("approval_status") // APPROVED, PENDING, REJECTED
+  onboardingCompleted Boolean    @default(false) @map("onboarding_completed")
+  isEmailVerified     Boolean    @default(false) @map("is_email_verified")
+  emailVerifiedAt     DateTime?  @map("email_verified_at")
+  verificationToken   String?    @map("verification_token")
+  verificationTokenExpires DateTime? @map("verification_token_expires")
+  gymId               String?    @map("gym_id")
+  avatarUrl           String?    @map("avatar_url")
+  specialization      String?
+  experience          Int?
+  isDeleted           Boolean    @default(false) @map("is_deleted")
+  deletedAt           DateTime?  @map("deleted_at")
+  createdAt           DateTime   @default(now()) @map("created_at")
+  updatedAt           DateTime   @updatedAt @map("updated_at")
+
+  gym                    Gym?                    @relation("GymMembers", fields: [gymId], references: [id])
+  ownedGyms              Gym[]                   @relation("GymOwner")
+  memberships            Membership[]
+  trainerAllocations     TrainerAllocation[]     @relation("TrainerAllocations")
+  clientAllocations      TrainerAllocation[]     @relation("ClientAllocations")
+  healthMetrics          ClientHealthMetric[]
+  nutritionLogs          DailyNutrition[]
+  sentNotifications      Notification[]          @relation("SentNotifications")
+  receivedNotifications  NotificationRecipient[]
+
+  @@map("users")
+  @@index([role])
+  @@index([status])
+  @@index([gymId])
+  @@index([isDeleted])
+  @@index([createdAt])
+}
+
+model Membership {
+  id        String           @id @default(cuid())
+  clientId  String           @map("client_id")
+  planName  String           @default("Basic")
+  amount    Float            @default(0)
+  startDate DateTime         @map("start_date")
+  endDate   DateTime         @map("end_date")
+  status    String           @default("ACTIVE") // ACTIVE, EXPIRED, FROZEN
+  notes     String?
+  isDeleted Boolean          @default(false) @map("is_deleted")
+  deletedAt DateTime?        @map("deleted_at")
+  createdAt DateTime         @default(now()) @map("created_at")
+  updatedAt DateTime         @updatedAt @map("updated_at")
+
+  client User @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@map("memberships")
+  @@index([clientId])
+  @@index([status])
+  @@index([endDate])
+  @@index([isDeleted])
+}
+
+model TrainerAllocation {
+  id          String   @id @default(cuid())
+  trainerId   String   @map("trainer_id")
+  clientId    String   @map("client_id")
+  allocatedAt DateTime @default(now()) @map("allocated_at")
+  isActive    Boolean  @default(true) @map("is_active")
+
+  trainer User @relation("TrainerAllocations", fields: [trainerId], references: [id], onDelete: Cascade)
+  client  User @relation("ClientAllocations", fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([trainerId, clientId])
+  @@map("trainer_allocations")
+  @@index([trainerId])
+  @@index([clientId])
+  @@index([isActive])
+}
+
+model ClientHealthMetric {
+  id              String   @id @default(cuid())
+  clientId        String   @map("client_id")
+  bmi             Float?
+  weightKg        Float    @map("weight_kg")
+  bodyFatPercent   Float?   @map("body_fat_percent")
+  bloodReportJson String?  @map("blood_report_json")
+  notes           String?
+  recordedAt      DateTime @default(now()) @map("recorded_at")
+
+  client User @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@map("client_health_metrics")
+  @@index([clientId])
+  @@index([recordedAt])
+}
+
+model DailyNutrition {
+  id           String   @id @default(cuid())
+  clientId     String   @map("client_id")
+  imageUrl     String?  @map("image_url")
+  detectedFood String?  @map("detected_food")
+  calories     Float    @default(0)
+  protein      Float    @default(0)
+  carbs        Float    @default(0)
+  fats         Float    @default(0)
+  mealType     String   @default("LUNCH") @map("meal_type") // BREAKFAST, LUNCH, DINNER, SNACK
+  loggedAt     DateTime @default(now()) @map("logged_at")
+
+  client User @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@map("daily_nutrition")
+  @@index([clientId])
+  @@index([loggedAt])
+  @@index([mealType])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  title     String
+  message   String
+  type      String   @default("GENERAL")
+  sentById  String   @map("sent_by_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  sentBy     User                    @relation("SentNotifications", fields: [sentById], references: [id])
+  recipients NotificationRecipient[]
+
+  @@map("notifications")
+  @@index([sentById])
+  @@index([type])
+  @@index([createdAt])
+}
+
+model NotificationRecipient {
+  id             String    @id @default(cuid())
+  notificationId String    @map("notification_id")
+  userId         String    @map("user_id")
+  readAt         DateTime? @map("read_at")
+
+  notification Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([notificationId, userId])
+  @@map("notification_recipients")
+  @@index([userId])
+  @@index([readAt])
+}
+
+model GymSettings {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("gym_settings")
+}
