@@ -244,7 +244,7 @@ export default function NutritionPage() {
       {/* Progress Chart */}
       {chartData.length > 0 && (
 
-        <Card className="glass-card">
+        <Card className="glass-card min-w-0 overflow-hidden">
           <CardHeader>
             <CardTitle className="text-base font-semibold">Calories & Protein Intake</CardTitle>
             <CardDescription>Daily nutritional stats breakdown</CardDescription>

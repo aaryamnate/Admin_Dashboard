@@ -308,15 +308,15 @@ export default function MemberDetailsPage() {
         {/* 8 Detail Tabs */}
         <div className="lg:col-span-2 space-y-6">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-4 sm:grid-cols-8 bg-muted/60 p-1 rounded-xl text-xs gap-1">
-              <TabsTrigger value="overview" className="text-[11px] py-1.5">Personal</TabsTrigger>
-              <TabsTrigger value="memberships" className="text-[11px] py-1.5">Memberships</TabsTrigger>
-              <TabsTrigger value="gym-history" className="text-[11px] py-1.5">Gym History</TabsTrigger>
-              <TabsTrigger value="trainers" className="text-[11px] py-1.5">Trainers</TabsTrigger>
-              <TabsTrigger value="metrics" className="text-[11px] py-1.5">Health</TabsTrigger>
-              <TabsTrigger value="nutrition" className="text-[11px] py-1.5">Nutrition</TabsTrigger>
-              <TabsTrigger value="documents" className="text-[11px] py-1.5">Documents</TabsTrigger>
-              <TabsTrigger value="progress" className="text-[11px] py-1.5">Progress</TabsTrigger>
+            <TabsList className="flex w-full overflow-x-auto scrollbar-none bg-muted/60 p-1 rounded-xl text-xs gap-1 sm:grid sm:grid-cols-8">
+              <TabsTrigger value="overview" className="shrink-0 text-[11px] py-1.5 px-3 sm:px-1">Personal</TabsTrigger>
+              <TabsTrigger value="memberships" className="shrink-0 text-[11px] py-1.5 px-3 sm:px-1">Memberships</TabsTrigger>
+              <TabsTrigger value="gym-history" className="shrink-0 text-[11px] py-1.5 px-3 sm:px-1">Gym History</TabsTrigger>
+              <TabsTrigger value="trainers" className="shrink-0 text-[11px] py-1.5 px-3 sm:px-1">Trainers</TabsTrigger>
+              <TabsTrigger value="metrics" className="shrink-0 text-[11px] py-1.5 px-3 sm:px-1">Health</TabsTrigger>
+              <TabsTrigger value="nutrition" className="shrink-0 text-[11px] py-1.5 px-3 sm:px-1">Nutrition</TabsTrigger>
+              <TabsTrigger value="documents" className="shrink-0 text-[11px] py-1.5 px-3 sm:px-1">Documents</TabsTrigger>
+              <TabsTrigger value="progress" className="shrink-0 text-[11px] py-1.5 px-3 sm:px-1">Progress</TabsTrigger>
             </TabsList>
 
             {/* 1. Personal Overview Tab */}

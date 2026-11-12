@@ -21,6 +21,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Plus,
+  Crown,
 } from 'lucide-react'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import {
@@ -157,11 +158,14 @@ export default function DashboardPage() {
       </div>
 
       {/* Quick Action Buttons */}
-      <div className="flex gap-4 items-center">
-        <Button onClick={() => router.push('/members')} className="bg-primary hover:bg-primary/95 text-primary-foreground shadow-md shadow-primary/10 rounded-xl px-5 h-11 border-none cursor-pointer">
+      <div className="flex flex-wrap gap-3 items-center">
+        <Button onClick={() => router.push('/owner-hub')} className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-black font-bold shadow-md shadow-amber-500/10 rounded-xl px-4 sm:px-5 h-10 sm:h-11 border-none cursor-pointer text-xs sm:text-sm">
+          <Crown className="h-4 w-4 mr-2" /> Gym Owner Hub
+        </Button>
+        <Button onClick={() => router.push('/members')} className="bg-primary hover:bg-primary/95 text-primary-foreground shadow-md shadow-primary/10 rounded-xl px-4 sm:px-5 h-10 sm:h-11 border-none cursor-pointer text-xs sm:text-sm">
           <UserPlus className="h-4 w-4 mr-2" /> Add Member
         </Button>
-        <Button onClick={() => router.push('/allocations')} variant="outline" className="border-border/45 bg-card/40 hover:bg-muted/50 rounded-xl px-5 h-11 text-foreground cursor-pointer">
+        <Button onClick={() => router.push('/allocations')} variant="outline" className="border-border/45 bg-card/40 hover:bg-muted/50 rounded-xl px-4 sm:px-5 h-10 sm:h-11 text-foreground cursor-pointer text-xs sm:text-sm">
           <Calendar className="h-4 w-4 mr-2" /> Schedule Trainer
         </Button>
       </div>
@@ -170,7 +174,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* Revenue Forecast Chart */}
-        <Card className="glass-card border-border/40 lg:col-span-2 p-6 flex flex-col justify-between min-h-[360px]">
+        <Card className="glass-card border-border/40 lg:col-span-2 p-4 sm:p-6 flex flex-col justify-between min-h-[360px] min-w-0 overflow-hidden">
           <div className="flex items-center justify-between border-b border-border/40 pb-4 mb-4">
             <div>
               <CardTitle className="text-sm font-bold uppercase tracking-wider text-foreground">Revenue Forecast</CardTitle>
@@ -263,12 +267,12 @@ export default function DashboardPage() {
       </div>
 
       {/* Upcoming Renewals Table */}
-      <Card className="glass-card border-border/40 p-0">
-        <div className="p-6 flex justify-between items-center border-b border-border/40">
+      <Card className="glass-card border-border/40 p-0 overflow-hidden">
+        <div className="p-4 sm:p-6 flex justify-between items-center border-b border-border/40">
           <CardTitle className="text-sm font-bold uppercase tracking-wider text-foreground">Upcoming Renewals</CardTitle>
           <span onClick={() => router.push('/memberships')} className="text-xs text-primary font-semibold hover:underline cursor-pointer">View All</span>
         </div>
-        <CardContent className="p-0">
+        <CardContent className="p-0 overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow className="border-b border-border/40 hover:bg-transparent">

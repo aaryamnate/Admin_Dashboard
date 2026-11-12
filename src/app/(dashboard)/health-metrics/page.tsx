@@ -345,7 +345,7 @@ export default function HealthMetricsPage() {
         </div>
 
         {/* AI Insight Chip & BMI Trend */}
-        <div className="md:col-span-7 space-y-6 flex flex-col">
+        <div className="md:col-span-7 space-y-6 flex flex-col min-w-0">
           {/* AI Insight Chip */}
           <div className="bg-primary/5 border border-primary/10 rounded-xl p-4 flex items-center gap-4 backdrop-blur-sm shadow-sm">
             <div className="w-10 h-10 rounded-xl bg-primary/15 flex items-center justify-center text-primary shrink-0 border border-primary/20 animate-pulse-glow">
@@ -360,7 +360,7 @@ export default function HealthMetricsPage() {
           </div>
 
           {/* BMI Trends Chart */}
-          <Card className="glass-card border-border/40 p-6 flex-grow flex flex-col justify-between min-h-[260px]">
+          <Card className="glass-card border-border/40 p-4 sm:p-6 flex-grow flex flex-col justify-between min-h-[260px] min-w-0 overflow-hidden">
             <div className="flex justify-between items-center mb-4">
               <div>
                 <CardTitle className="text-sm font-bold uppercase tracking-wider text-foreground">BMI Trends</CardTitle>

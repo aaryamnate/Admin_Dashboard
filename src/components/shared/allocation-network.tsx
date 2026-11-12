@@ -1,12 +1,13 @@
 'use client'
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { cn } from '@/lib/utils'
-import { Dumbbell, Users, RefreshCw, ZoomIn, ZoomOut, Maximize2, X } from 'lucide-react'
+import { Dumbbell, Users, RefreshCw, ZoomIn, ZoomOut, Maximize2, X, Crosshair, Sparkles, UserCheck } from 'lucide-react'
 import { useDeleteAllocation } from '@/hooks/use-allocations'
 import { useToast } from '@/components/ui/toast'
 import { Button } from '@/components/ui/button'
 import { Avatar } from '@/components/ui/avatar'
+import { Badge } from '@/components/ui/badge'
 
 interface Node {
   id: string
@@ -37,11 +38,20 @@ export function AllocationNetwork({ allocations, onSelectNode }: AllocationNetwo
   const deleteAllocationMutation = useDeleteAllocation()
   const canvasContainerRef = useRef<HTMLDivElement>(null)
 
+  // Container dimensions
+  const [dimensions, setDimensions] = useState({ width: 800, height: 520 })
+  const isMobile = dimensions.width < 640
+  const isSmallMobile = dimensions.width < 420
+
   // Zoom / Pan states
   const [zoom, setZoom] = useState(1)
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [isPanning, setIsPanning] = useState(false)
   const [panStart, setPanStart] = useState({ x: 0, y: 0 })
+
+  // Pinch-to-zoom state for mobile
+  const [pinchStartDist, setPinchStartDist] = useState<number | null>(null)
+  const [initialPinchZoom, setInitialPinchZoom] = useState(1)
 
   // Node position & drag states
   const [nodes, setNodes] = useState<Node[]>([])
@@ -50,9 +60,78 @@ export function AllocationNetwork({ allocations, onSelectNode }: AllocationNetwo
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
   const [selectedNode, setSelectedNode] = useState<Node | null>(null)
 
-  // Process raw allocations into a visual graph structure
+  // Center coordinates
+  const cx = dimensions.width > 0 ? dimensions.width / 2 : 400
+  const cy = dimensions.height > 0 ? dimensions.height / 2 : 260
+
+  // Track container dimensions with ResizeObserver
   useEffect(() => {
-    if (!allocations || allocations.length === 0) return
+    const el = canvasContainerRef.current
+    if (!el) return
+
+    const updateSize = () => {
+      const rect = el.getBoundingClientRect()
+      if (rect.width > 0 && rect.height > 0) {
+        setDimensions({
+          width: Math.round(rect.width),
+          height: Math.round(rect.height),
+        })
+      }
+    }
+
+    updateSize()
+
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect
+        if (width > 0 && height > 0) {
+          setDimensions({
+            width: Math.round(width),
+            height: Math.round(height),
+          })
+        }
+      }
+    })
+
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
+  // Recenter and adapt viewport
+  const resetViewport = useCallback(() => {
+    setPan({ x: 0, y: 0 })
+    // On small mobile, default zoom slightly zoomed out to fit nicely
+    if (dimensions.width < 420) {
+      setZoom(0.85)
+    } else if (dimensions.width < 640) {
+      setZoom(0.92)
+    } else {
+      setZoom(1)
+    }
+    setSelectedNode(null)
+  }, [dimensions.width])
+
+  // Reset viewport when screen mode changes between mobile and desktop
+  useEffect(() => {
+    if (dimensions.width > 0) {
+      if (dimensions.width < 420) {
+        setZoom(0.85)
+      } else if (dimensions.width < 640) {
+        setZoom(0.92)
+      } else {
+        setZoom(1)
+      }
+      setPan({ x: 0, y: 0 })
+    }
+  }, [dimensions.width < 640])
+
+  // Layout algorithm: Circular / Orbital Topology centered dynamically
+  useEffect(() => {
+    if (!allocations || allocations.length === 0) {
+      setNodes([])
+      setLinks([])
+      return
+    }
 
     const tempNodes: Node[] = []
     const tempLinks: Link[] = []
@@ -101,57 +180,110 @@ export function AllocationNetwork({ allocations, onSelectNode }: AllocationNetwo
       }
     })
 
-    // Layout algorithm: Circular orbital topology
-    // Trainers spaced evenly in a horizontal line or wide triangle
-    const trainers = tempNodes.filter(n => n.role === 'TRAINER')
-    const clients = tempNodes.filter(n => n.role === 'CLIENT')
-
-    const width = canvasContainerRef.current?.clientWidth || 800
-    const height = canvasContainerRef.current?.clientHeight || 500
-
+    const trainers = tempNodes.filter((n) => n.role === 'TRAINER')
+    const clients = tempNodes.filter((n) => n.role === 'CLIENT')
     const trainerCoordsMap = new Map<string, { x: number; y: number }>()
 
-    trainers.forEach((t, idx) => {
-      // Position trainers spaced horizontally
-      const x = width / 2 + (idx - (trainers.length - 1) / 2) * (width * 0.25)
-      const y = height / 2 + (idx % 2 === 0 ? -40 : 40)
-      t.x = x
-      t.y = y
-      trainerCoordsMap.set(t.id, { x, y })
-    })
+    const mobileMode = dimensions.width < 640
+    const smallMobileMode = dimensions.width < 420
+
+    // Position Trainers centered according to viewport
+    if (mobileMode) {
+      // Mobile positioning: centralized orbital hub
+      if (trainers.length === 1) {
+        trainers[0].x = cx
+        trainers[0].y = cy - 10
+        trainerCoordsMap.set(trainers[0].id, { x: trainers[0].x, y: trainers[0].y })
+      } else if (trainers.length === 2) {
+        const spread = smallMobileMode ? 65 : 85
+        trainers[0].x = cx - spread
+        trainers[0].y = cy - 15
+        trainers[1].x = cx + spread
+        trainers[1].y = cy - 15
+        trainerCoordsMap.set(trainers[0].id, { x: trainers[0].x, y: trainers[0].y })
+        trainerCoordsMap.set(trainers[1].id, { x: trainers[1].x, y: trainers[1].y })
+      } else {
+        // 3+ trainers: symmetrical circular constellation around center
+        const hubRadius = smallMobileMode ? 65 : 85
+        trainers.forEach((t, idx) => {
+          const angle = (2 * Math.PI * idx) / trainers.length - Math.PI / 2
+          const x = cx + Math.cos(angle) * hubRadius
+          const y = cy + Math.sin(angle) * (hubRadius * 0.85) - 10
+          t.x = x
+          t.y = y
+          trainerCoordsMap.set(t.id, { x, y })
+        })
+      }
+    } else {
+      // Desktop positioning: balanced horizontal spread
+      const trainerSpacing = Math.min(dimensions.width * 0.28, 220)
+      trainers.forEach((t, idx) => {
+        const x = cx + (idx - (trainers.length - 1) / 2) * trainerSpacing
+        const y = cy + (idx % 2 === 0 ? -30 : 30)
+        t.x = x
+        t.y = y
+        trainerCoordsMap.set(t.id, { x, y })
+      })
+    }
 
     // Clients cluster around their assigned trainer
     clients.forEach((c) => {
-      // Find what trainer this client is allocated to
-      const allocation = tempLinks.find(l => l.clientId === c.id)
+      const allocation = tempLinks.find((l) => l.clientId === c.id)
       if (allocation) {
         const tCoords = trainerCoordsMap.get(allocation.trainerId)
         if (tCoords) {
-          // Find how many clients this trainer has to distribute angles
-          const trainerClients = tempLinks.filter(l => l.trainerId === allocation.trainerId)
-          const clientIndex = trainerClients.findIndex(l => l.clientId === c.id)
-          const angle = (2 * Math.PI * clientIndex) / (trainerClients.length || 1)
-          const radius = 120 // orbit radius
+          const trainerClients = tempLinks.filter((l) => l.trainerId === allocation.trainerId)
+          const clientIndex = trainerClients.findIndex((l) => l.clientId === c.id)
+          const totalTrainerClients = trainerClients.length || 1
+
+          let angle: number
+          let radius: number
+
+          if (mobileMode) {
+            // Smaller orbit radius on mobile to stay within bounds
+            radius = smallMobileMode ? 48 : 62
+            // Distribute clients around their trainer
+            const tAngle = Math.atan2(tCoords.y - cy, tCoords.x - cx)
+            // Bias client angles outward away from center
+            const spreadAngle = (Math.PI * 1.5) / Math.max(totalTrainerClients, 1)
+            angle = tAngle + (clientIndex - (totalTrainerClients - 1) / 2) * spreadAngle
+          } else {
+            radius = 110 // Full desktop orbit radius
+            angle = (2 * Math.PI * clientIndex) / totalTrainerClients
+          }
 
           c.x = tCoords.x + Math.cos(angle) * radius
           c.y = tCoords.y + Math.sin(angle) * radius
           return
         }
       }
-      
+
       // Default fallback coordinates if unallocated
-      c.x = Math.random() * (width - 100) + 50
-      c.y = Math.random() * (height - 100) + 50
+      c.x = Math.random() * (dimensions.width - 120) + 60
+      c.y = Math.random() * (dimensions.height - 120) + 60
     })
 
     setNodes(tempNodes)
     setLinks(tempLinks)
-  }, [allocations])
+  }, [allocations, dimensions.width, dimensions.height, cx, cy])
 
-  // Pan actions
+  // Coordinate helper: converts screen client coordinates to SVG graph coordinates
+  const clientToSvgCoords = (clientX: number, clientY: number) => {
+    if (!canvasContainerRef.current) return { x: 0, y: 0 }
+    const rect = canvasContainerRef.current.getBoundingClientRect()
+    // Relative to canvas
+    const relX = clientX - rect.left
+    const relY = clientY - rect.top
+    // Reverse SVG transform: translate(cx + pan.x, cy + pan.y) scale(zoom) translate(-cx, -cy)
+    const svgX = cx + (relX - (cx + pan.x)) / zoom
+    const svgY = cy + (relY - (cy + pan.y)) / zoom
+    return { x: svgX, y: svgY }
+  }
+
+  // --- Mouse Handlers ---
   const handleBgMouseDown = (e: React.MouseEvent) => {
-    // Check if clicking background, not a node
-    if ((e.target as SVGElement).tagName === 'svg' || (e.target as SVGElement).id === 'grid-bg') {
+    const target = e.target as SVGElement
+    if (target.tagName === 'svg' || target.id === 'grid-bg') {
       setIsPanning(true)
       setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y })
     }
@@ -164,15 +296,11 @@ export function AllocationNetwork({ allocations, onSelectNode }: AllocationNetwo
         y: e.clientY - panStart.y,
       })
     } else if (draggingNodeId) {
-      // Dragging node
-      const rect = e.currentTarget.getBoundingClientRect()
-      const mouseX = (e.clientX - rect.left - pan.x) / zoom
-      const mouseY = (e.clientY - rect.top - pan.y) / zoom
-
+      const { x: svgX, y: svgY } = clientToSvgCoords(e.clientX, e.clientY)
       setNodes((prev) =>
         prev.map((n) =>
           n.id === draggingNodeId
-            ? { ...n, x: mouseX - dragOffset.x, y: mouseY - dragOffset.y }
+            ? { ...n, x: svgX - dragOffset.x, y: svgY - dragOffset.y }
             : n
         )
       )
@@ -184,37 +312,100 @@ export function AllocationNetwork({ allocations, onSelectNode }: AllocationNetwo
     setDraggingNodeId(null)
   }
 
-  // Node drag actions
   const handleNodeMouseDown = (e: React.MouseEvent, node: Node) => {
     e.stopPropagation()
     setDraggingNodeId(node.id)
-    
-    // Calculate mouse click offset relative to node center
-    const rect = e.currentTarget.parentElement?.getBoundingClientRect()
-    if (rect) {
-      const mouseX = (e.clientX - rect.left - pan.x) / zoom
-      const mouseY = (e.clientY - rect.top - pan.y) / zoom
-      setDragOffset({
-        x: mouseX - node.x,
-        y: mouseY - node.y,
-      })
-    }
+    const { x: svgX, y: svgY } = clientToSvgCoords(e.clientX, e.clientY)
+    setDragOffset({
+      x: svgX - node.x,
+      y: svgY - node.y,
+    })
     setSelectedNode(node)
     if (onSelectNode) onSelectNode(node)
   }
 
-  // Zoom controls
-  const zoomIn = () => setZoom(prev => Math.min(prev + 0.15, 2.5))
-  const zoomOut = () => setZoom(prev => Math.max(prev - 0.15, 0.4))
-  const resetViewport = () => {
-    setZoom(1)
-    setPan({ x: 0, y: 0 })
-    setSelectedNode(null)
+  // --- Touch Handlers (Mobile Optimization) ---
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      // 1 touch: check if background panning
+      const target = e.target as SVGElement
+      if (target.tagName === 'svg' || target.id === 'grid-bg') {
+        const touch = e.touches[0]
+        setIsPanning(true)
+        setPanStart({ x: touch.clientX - pan.x, y: touch.clientY - pan.y })
+      }
+    } else if (e.touches.length === 2) {
+      // 2 touches: start pinch zoom
+      setIsPanning(false)
+      setDraggingNodeId(null)
+      const t1 = e.touches[0]
+      const t2 = e.touches[1]
+      const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY)
+      setPinchStartDist(dist)
+      setInitialPinchZoom(zoom)
+    }
   }
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length === 2 && pinchStartDist !== null) {
+      // Pinch to zoom gesture
+      const t1 = e.touches[0]
+      const t2 = e.touches[1]
+      const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY)
+      const scaleFactor = dist / pinchStartDist
+      const newZoom = Math.max(0.4, Math.min(2.5, initialPinchZoom * scaleFactor))
+      setZoom(newZoom)
+      return
+    }
+
+    if (e.touches.length === 1) {
+      const touch = e.touches[0]
+      if (draggingNodeId) {
+        const { x: svgX, y: svgY } = clientToSvgCoords(touch.clientX, touch.clientY)
+        setNodes((prev) =>
+          prev.map((n) =>
+            n.id === draggingNodeId
+              ? { ...n, x: svgX - dragOffset.x, y: svgY - dragOffset.y }
+              : n
+          )
+        )
+      } else if (isPanning) {
+        setPan({
+          x: touch.clientX - panStart.x,
+          y: touch.clientY - panStart.y,
+        })
+      }
+    }
+  }
+
+  const handleTouchEnd = () => {
+    setIsPanning(false)
+    setDraggingNodeId(null)
+    setPinchStartDist(null)
+  }
+
+  const handleNodeTouchStart = (e: React.TouchEvent, node: Node) => {
+    e.stopPropagation()
+    if (e.touches.length === 1) {
+      const touch = e.touches[0]
+      setDraggingNodeId(node.id)
+      const { x: svgX, y: svgY } = clientToSvgCoords(touch.clientX, touch.clientY)
+      setDragOffset({
+        x: svgX - node.x,
+        y: svgY - node.y,
+      })
+      setSelectedNode(node)
+      if (onSelectNode) onSelectNode(node)
+    }
+  }
+
+  // Zoom controls
+  const zoomIn = () => setZoom((prev) => Math.min(prev + 0.15, 2.5))
+  const zoomOut = () => setZoom((prev) => Math.max(prev - 0.15, 0.4))
 
   // Delete Allocation Link
   const handleDisconnect = (linkId: string) => {
-    if (window.confirm('Disconnect this trainer allocation?')) {
+    if (window.confirm('Disconnect this trainer-member coaching connection?')) {
       deleteAllocationMutation.mutate(linkId, {
         onSuccess: () => {
           toast({ title: 'Success', description: 'Coaching connection terminated', variant: 'success' })
@@ -227,10 +418,14 @@ export function AllocationNetwork({ allocations, onSelectNode }: AllocationNetwo
     }
   }
 
+  // Adaptive node sizes
+  const trainerRadius = isSmallMobile ? 18 : isMobile ? 20 : 24
+  const clientRadius = isSmallMobile ? 13 : isMobile ? 15 : 18
+
   return (
-    <div 
+    <div
       ref={canvasContainerRef}
-      className="relative w-full h-[580px] rounded-2xl border border-border/40 bg-card/25 backdrop-blur-md overflow-hidden shadow-2xl"
+      className="relative w-full h-[460px] sm:h-[540px] lg:h-[580px] rounded-2xl border border-border/40 bg-card/25 backdrop-blur-md overflow-hidden shadow-2xl touch-none select-none"
     >
       {/* Node linking animation CSS style */}
       <style>{`
@@ -244,52 +439,58 @@ export function AllocationNetwork({ allocations, onSelectNode }: AllocationNetwo
 
       {/* SVG Canvas Workspace */}
       <svg
-        className="w-full h-full cursor-grab active:cursor-grabbing select-none"
+        className="w-full h-full cursor-grab active:cursor-grabbing select-none touch-none"
         onMouseDown={handleBgMouseDown}
         onMouseMove={handleBgMouseMove}
         onMouseUp={handleBgMouseUp}
         onMouseLeave={handleBgMouseUp}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchEnd}
       >
         <defs>
           {/* Subtle grid background pattern */}
           <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="var(--grid-line)" strokeWidth="1" />
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="var(--grid-line, rgba(255,255,255,0.04))" strokeWidth="1" />
           </pattern>
-          {/* Circular crop mask for node avatars */}
-          <clipPath id="avatar-clip">
-            <circle cx="0" cy="0" r="24" />
+          {/* Circular crop mask for trainer avatars */}
+          <clipPath id="avatar-clip-trainer">
+            <circle cx="0" cy="0" r={trainerRadius} />
           </clipPath>
+          {/* Circular crop mask for client avatars */}
           <clipPath id="avatar-clip-client">
-            <circle cx="0" cy="0" r="18" />
+            <circle cx="0" cy="0" r={clientRadius} />
           </clipPath>
         </defs>
 
         {/* Grid Background Layer */}
         <rect id="grid-bg" width="100%" height="100%" fill="url(#grid)" />
 
-        {/* Zoomed/Paged Group Layer */}
-        <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
+        {/* Center-anchored Zoomed/Panned Group Layer */}
+        <g
+          transform={`translate(${cx + pan.x}, ${cy + pan.y}) scale(${zoom}) translate(${-cx}, ${-cy})`}
+        >
           {/* Network Link Vector Lines */}
           {links.map((link) => {
-            const trainer = nodes.find(n => n.id === link.trainerId)
-            const client = nodes.find(n => n.id === link.clientId)
+            const trainer = nodes.find((n) => n.id === link.trainerId)
+            const client = nodes.find((n) => n.id === link.clientId)
 
             if (!trainer || !client) return null
 
             // Draw a curved SVG quadratic path linking trainer to client
             const midX = (trainer.x + client.x) / 2
-            const midY = (trainer.y + client.y) / 2 - 25 // curve factor
+            const midY = (trainer.y + client.y) / 2 - (isMobile ? 12 : 22)
             const pathData = `M ${trainer.x} ${trainer.y} Q ${midX} ${midY} ${client.x} ${client.y}`
-
             const isSelected = selectedNode?.id === trainer.id || selectedNode?.id === client.id
 
             return (
               <g key={link.id} className="group">
-                {/* Thick invisible click-target line */}
+                {/* Thick invisible click/touch target line */}
                 <path
                   d={pathData}
                   stroke="transparent"
-                  strokeWidth="15"
+                  strokeWidth={isMobile ? '24' : '18'}
                   fill="none"
                   className="cursor-pointer"
                   onClick={() => handleDisconnect(link.id)}
@@ -297,14 +498,14 @@ export function AllocationNetwork({ allocations, onSelectNode }: AllocationNetwo
                 {/* Glowing glow-shadow path line */}
                 <path
                   d={pathData}
-                  stroke={isSelected ? "var(--color-primary)" : "rgba(99, 102, 241, 0.2)"}
-                  strokeWidth={isSelected ? "3" : "1.5"}
+                  stroke={isSelected ? 'var(--color-primary, #6366f1)' : 'rgba(99, 102, 241, 0.25)'}
+                  strokeWidth={isSelected ? '3' : isMobile ? '1.8' : '1.5'}
                   fill="none"
                   className={cn(
-                    "transition-all duration-300 pointer-events-none",
-                    isSelected && "network-link-active"
+                    'transition-all duration-300 pointer-events-none',
+                    isSelected && 'network-link-active'
                   )}
-                  strokeDasharray={isSelected ? "6 4" : undefined}
+                  strokeDasharray={isSelected ? '6 4' : undefined}
                 />
               </g>
             )
@@ -313,8 +514,12 @@ export function AllocationNetwork({ allocations, onSelectNode }: AllocationNetwo
           {/* Node SVG Groups */}
           {nodes.map((node) => {
             const isTrainer = node.role === 'TRAINER'
-            const nodeSize = isTrainer ? 24 : 18
+            const nodeSize = isTrainer ? trainerRadius : clientRadius
             const isSelected = selectedNode?.id === node.id
+
+            // Label box dimensions
+            const labelWidth = isTrainer ? (isSmallMobile ? 80 : 96) : (isSmallMobile ? 68 : 82)
+            const labelHeight = isSmallMobile ? 20 : 24
 
             return (
               <g
@@ -322,28 +527,36 @@ export function AllocationNetwork({ allocations, onSelectNode }: AllocationNetwo
                 transform={`translate(${node.x}, ${node.y})`}
                 className="cursor-pointer group"
                 onMouseDown={(e) => handleNodeMouseDown(e, node)}
+                onTouchStart={(e) => handleNodeTouchStart(e, node)}
               >
                 {/* Glowing radial outer shadow circle */}
                 <circle
                   cx="0"
                   cy="0"
-                  r={nodeSize + (isTrainer ? 6 : 4)}
+                  r={nodeSize + (isTrainer ? 5 : 3.5)}
                   fill="none"
                   stroke={
-                    isTrainer 
-                      ? "var(--color-primary)" 
-                      : node.status === 'ACTIVE' ? "var(--color-accent)" : "rgba(156, 163, 175, 0.5)"
+                    isTrainer
+                      ? 'var(--color-primary, #6366f1)'
+                      : node.status === 'ACTIVE'
+                      ? 'var(--color-accent, #06b6d4)'
+                      : 'rgba(156, 163, 175, 0.5)'
                   }
-                  strokeWidth="2.5"
+                  strokeWidth={isSelected ? '3' : '2'}
                   className={cn(
-                    "transition-all duration-300 opacity-60 group-hover:opacity-100",
-                    isSelected && "scale-110 opacity-100 ring-4 ring-primary/20",
-                    isTrainer ? "shadow-primary/40 shadow-lg" : "shadow-accent/40 shadow-lg"
+                    'transition-all duration-300',
+                    isSelected ? 'opacity-100 scale-110' : 'opacity-70 group-hover:opacity-100'
                   )}
                 />
 
-                {/* Translucent overlay circle */}
-                <circle cx="0" cy="0" r={nodeSize} fill="var(--color-card)" className="transition-transform group-hover:scale-105" />
+                {/* Translucent background circle */}
+                <circle
+                  cx="0"
+                  cy="0"
+                  r={nodeSize}
+                  fill="var(--color-card, #0f172a)"
+                  className="transition-transform group-hover:scale-105"
+                />
 
                 {/* Avatar Image clip */}
                 {node.avatarUrl ? (
@@ -353,19 +566,24 @@ export function AllocationNetwork({ allocations, onSelectNode }: AllocationNetwo
                     y={-nodeSize}
                     width={nodeSize * 2}
                     height={nodeSize * 2}
-                    clipPath={isTrainer ? "url(#avatar-clip)" : "url(#avatar-clip-client)"}
+                    clipPath={isTrainer ? 'url(#avatar-clip-trainer)' : 'url(#avatar-clip-client)'}
                     preserveAspectRatio="xMidYMid slice"
                   />
                 ) : (
-                  // Fallback vector letters
+                  // Fallback letter icon
                   <g className="pointer-events-none">
-                    <circle cx="0" cy="0" r={nodeSize} fill={isTrainer ? "rgba(139, 92, 246, 0.2)" : "rgba(6, 182, 212, 0.2)"} />
+                    <circle
+                      cx="0"
+                      cy="0"
+                      r={nodeSize}
+                      fill={isTrainer ? 'rgba(99, 102, 241, 0.25)' : 'rgba(6, 182, 212, 0.2)'}
+                    />
                     <text
                       textAnchor="middle"
-                      dy={isTrainer ? "5" : "4"}
+                      dy={isTrainer ? '4' : '3.5'}
                       className={cn(
-                        "font-bold select-none fill-foreground",
-                        isTrainer ? "text-sm" : "text-xs"
+                        'font-bold select-none fill-foreground',
+                        isTrainer ? 'text-xs sm:text-sm' : 'text-[10px] sm:text-xs'
                       )}
                     >
                       {node.name.slice(0, 1)}
@@ -373,31 +591,33 @@ export function AllocationNetwork({ allocations, onSelectNode }: AllocationNetwo
                   </g>
                 )}
 
-                {/* Text Label Backdrop box (to prevent text clashing with lines) */}
+                {/* Node Name Label Backdrop */}
                 <rect
-                  x="-70"
-                  y={nodeSize + 6}
-                  width="140"
-                  height="30"
-                  fill="var(--node-backdrop)"
-                  rx="6"
-                  className="backdrop-blur-sm stroke-border/20 stroke"
+                  x={-labelWidth / 2}
+                  y={nodeSize + 4}
+                  width={labelWidth}
+                  height={labelHeight}
+                  fill="rgba(15, 23, 42, 0.85)"
+                  rx="5"
+                  className="backdrop-blur-sm stroke-border/30 stroke"
                 />
 
                 {/* Node Name Text */}
                 <text
-                  y={nodeSize + 18}
+                  y={nodeSize + 14}
                   textAnchor="middle"
-                  className="text-[10px] font-semibold fill-foreground select-none pointer-events-none"
+                  className="text-[9px] sm:text-[10px] font-semibold fill-foreground select-none pointer-events-none"
                 >
-                  {node.name}
+                  {node.name.length > (isSmallMobile ? 10 : 13)
+                    ? `${node.name.slice(0, isSmallMobile ? 9 : 12)}…`
+                    : node.name}
                 </text>
                 <text
-                  y={nodeSize + 28}
+                  y={nodeSize + (isSmallMobile ? 21 : 23)}
                   textAnchor="middle"
-                  className="text-[8px] fill-muted-foreground select-none pointer-events-none capitalize"
+                  className="text-[7px] sm:text-[8px] fill-muted-foreground select-none pointer-events-none capitalize"
                 >
-                  {isTrainer ? (node.specialization || 'Coaching') : 'Client'}
+                  {isTrainer ? (node.specialization || 'Trainer') : 'Client'}
                 </text>
               </g>
             )
@@ -405,56 +625,98 @@ export function AllocationNetwork({ allocations, onSelectNode }: AllocationNetwo
         </g>
       </svg>
 
-      {/* Floating Canvas Controls Overlay */}
-      <div className="absolute bottom-4 left-4 flex items-center gap-1.5 p-1 bg-card/65 border border-border/40 backdrop-blur-md rounded-xl shadow-lg">
-        <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={zoomIn} title="Zoom In">
-          <ZoomIn className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+      {/* Floating Canvas Controls Overlay (Bottom-Left) */}
+      <div className="absolute bottom-3 left-3 flex items-center gap-1.5 p-1 bg-card/80 border border-border/50 backdrop-blur-md rounded-xl shadow-lg z-10">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 sm:h-8 sm:w-8 rounded-lg hover:bg-primary/20 text-foreground"
+          onClick={zoomIn}
+          title="Zoom In"
+        >
+          <ZoomIn className="h-4 w-4" />
         </Button>
-        <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={zoomOut} title="Zoom Out">
-          <ZoomOut className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 sm:h-8 sm:w-8 rounded-lg hover:bg-primary/20 text-foreground"
+          onClick={zoomOut}
+          title="Zoom Out"
+        >
+          <ZoomOut className="h-4 w-4" />
         </Button>
-        <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" onClick={resetViewport} title="Reset View">
-          <Maximize2 className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 sm:h-8 sm:w-8 rounded-lg hover:bg-primary/20 text-foreground"
+          onClick={resetViewport}
+          title="Recenter View"
+        >
+          <Crosshair className="h-4 w-4" />
         </Button>
+      </div>
+
+      {/* Floating Mobile/Touch Interaction Hint Badge (Top-Right) */}
+      <div className="absolute top-3 right-3 flex items-center gap-1.5 px-2.5 py-1 bg-card/75 border border-border/40 backdrop-blur-md rounded-full text-[9px] sm:text-[10px] text-muted-foreground pointer-events-none shadow-md">
+        <Sparkles className="h-3 w-3 text-primary animate-pulse" />
+        <span className="hidden sm:inline">Drag nodes • Click paths to disconnect</span>
+        <span className="sm:hidden">Touch to drag • Pinch zoom</span>
       </div>
 
       {/* Active Node Info Detail Panel overlay */}
       {selectedNode && (
-        <div className="absolute top-4 left-4 w-64 p-4 rounded-xl border border-border/50 bg-[#070b19]/90 backdrop-blur-md shadow-xl animate-slide-in-left">
-          <div className="flex items-center justify-between mb-3">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-primary">Node Details</h4>
-            <Button variant="ghost" size="icon" className="h-5 w-5 hover:bg-muted/50 rounded-full" onClick={() => setSelectedNode(null)}>
+        <div
+          className={cn(
+            'absolute z-20 p-3 sm:p-4 rounded-xl border border-border/60 bg-[#070b19]/95 backdrop-blur-xl shadow-2xl animate-fade-in transition-all',
+            // Mobile: anchored to bottom above the toolbar, full-width with margins
+            'bottom-14 left-3 right-3 sm:bottom-auto sm:left-3 sm:top-3 sm:right-auto sm:w-68'
+          )}
+        >
+          <div className="flex items-center justify-between mb-2 sm:mb-3">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-primary">
+                {selectedNode.role === 'TRAINER' ? 'Personal Coach' : 'Gym Member'}
+              </span>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 hover:bg-muted/50 rounded-full"
+              onClick={() => setSelectedNode(null)}
+            >
               <X className="h-3.5 w-3.5 text-muted-foreground" />
             </Button>
           </div>
-          <div className="flex items-center gap-3 mb-2">
+
+          <div className="flex items-center gap-2.5 mb-2">
             <Avatar fallback={selectedNode.name} size="sm" src={selectedNode.avatarUrl} />
-            <div className="min-w-0">
-              <p className="text-xs font-semibold text-foreground truncate">{selectedNode.name}</p>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-bold text-foreground truncate">{selectedNode.name}</p>
               <p className="text-[10px] text-muted-foreground truncate">{selectedNode.email}</p>
             </div>
           </div>
-          <div className="space-y-1.5 text-[10px] text-muted-foreground pt-2 border-t border-border/40">
-            <div className="flex justify-between">
-              <span>Type:</span>
-              <span className="font-semibold text-foreground capitalize">{selectedNode.role.toLowerCase()}</span>
-            </div>
+
+          <div className="space-y-1 text-[10px] text-muted-foreground pt-2 border-t border-border/40">
             {selectedNode.role === 'TRAINER' ? (
               <div className="flex justify-between">
-                <span>Specialty:</span>
-                <span className="font-semibold text-primary">{selectedNode.specialization || 'Weight Training'}</span>
+                <span>Specialization:</span>
+                <span className="font-semibold text-primary">{selectedNode.specialization || 'Fitness & Conditioning'}</span>
               </div>
             ) : (
               <div className="flex justify-between">
                 <span>Status:</span>
-                <span className={cn(
-                  "font-semibold",
-                  selectedNode.status === 'ACTIVE' ? "text-emerald-400" : "text-rose-400"
-                )}>{selectedNode.status || 'Active'}</span>
+                <span
+                  className={cn(
+                    'font-semibold',
+                    selectedNode.status === 'ACTIVE' ? 'text-emerald-400' : 'text-rose-400'
+                  )}
+                >
+                  {selectedNode.status || 'Active'}
+                </span>
               </div>
             )}
-            <p className="text-[8px] text-muted-foreground/60 italic mt-2">
-              Tip: Click on connection paths to sever allocations.
+            <p className="text-[8px] text-muted-foreground/70 italic pt-1">
+              Tip: Click or tap any curved connection line to disconnect pairing.
             </p>
           </div>
         </div>

@@ -16,6 +16,7 @@ import {
   Bell,
   BarChart3,
   Settings,
+  Crown,
   ChevronLeft,
   ChevronRight,
   LogOut,
@@ -26,6 +27,7 @@ import { Avatar } from '@/components/ui/avatar'
 // Map icon names from constants to Lucide components
 const iconMap: Record<string, LucideIcon> = {
   LayoutDashboard,
+  Crown,
   Users,
   CreditCard,
   Dumbbell,

@@ -55,7 +55,7 @@ export function SmartAssignmentPanel() {
   }
 
   return (
-    <div className="w-full xl:w-96 rounded-2xl border border-border/40 bg-card/25 backdrop-blur-md p-6 shadow-2xl flex flex-col justify-between h-[580px]">
+    <div className="w-full xl:w-96 rounded-2xl border border-border/40 bg-card/25 backdrop-blur-md p-5 sm:p-6 shadow-2xl flex flex-col justify-between min-h-[460px] sm:min-h-[520px] lg:h-[580px]">
       <div className="space-y-5">
         {/* Title */}
         <div className="flex items-center gap-2 pb-3 border-b border-border/40">

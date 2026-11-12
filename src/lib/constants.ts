@@ -36,6 +36,7 @@ export const NAV_ITEMS = [
     section: 'MAIN',
     items: [
       { label: 'Dashboard', href: '/dashboard', icon: 'LayoutDashboard' },
+      { label: 'Owner Hub', href: '/owner-hub', icon: 'Crown' },
     ],
   },
   {
